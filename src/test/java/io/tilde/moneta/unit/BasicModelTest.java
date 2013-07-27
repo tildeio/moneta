@@ -30,9 +30,17 @@ public class BasicModelTest extends TestCase {
     @Column
     String name;
 
-    Song(UUID key, String name) {
+    @Column
+    boolean explicit;
+
+    @Column
+    int plays;
+
+    Song(UUID key, String name, boolean explicit, int plays) {
       this.key = key;
       this.name = name;
+      this.explicit = explicit;
+      this.plays = plays;
     }
 
     public Song() {
@@ -42,7 +50,11 @@ public class BasicModelTest extends TestCase {
       if (o instanceof Song) {
         Song other = (Song) o;
 
-        return Objects.equals(key, other.key) && Objects.equals(name, other.name);
+        return
+          Objects.equals(key, other.key) &&
+          Objects.equals(name, other.name) &&
+          explicit == other.explicit &&
+          plays == other.plays;
       }
 
       return false;
@@ -51,7 +63,7 @@ public class BasicModelTest extends TestCase {
 
   @Test
   public void testPersistingAndLoadingABasicModel() {
-    Song song = new Song(UUID.randomUUID(), "Zomg");
+    Song song = new Song(UUID.randomUUID(), "Zomg", true, 3);
 
     mapper().persist(song);
 

@@ -49,7 +49,12 @@ public class MonetaMapper {
       return null;
     }
     catch (ExecutionException e) {
-      return null;
+      if (e.getCause() instanceof RuntimeException) {
+        throw (RuntimeException) e.getCause();
+      }
+      else {
+        throw new RuntimeException(e.getCause());
+      }
     }
   }
 

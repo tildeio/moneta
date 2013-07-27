@@ -29,7 +29,12 @@ public class TestCase {
   @Before
   public void reset() {
     createKeyspace(keyspace());
-    createTable("songs", "id uuid PRIMARY KEY, name text");
+
+    createTable("songs",
+      "id uuid PRIMARY KEY, " +
+      "name text, " +
+      "explicit boolean, " +
+      "plays varint");
   }
 
   public void createKeyspace(String name) {

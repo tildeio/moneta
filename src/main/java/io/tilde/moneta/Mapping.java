@@ -5,7 +5,6 @@ import com.datastax.driver.core.querybuilder.Insert;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.google.common.base.Function;
 import com.google.common.base.Functions;
-import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.tilde.moneta.annotations.Column;
@@ -62,6 +61,8 @@ class Mapping {
       .from(keyspace, table)
       .where(eq("id", key));
 
+    LOG.debug("get; query={}", query);
+
     return Futures.transform(
       session.executeAsync(query),
       new Function<ResultSet, T>() {
@@ -78,7 +79,7 @@ class Mapping {
       return null;
 
     for (FieldMapping mapping : fields.values()) {
-      mapping.setFrom(inst, row);
+      mapping.set(inst, row);
     }
 
     return inst;
@@ -107,20 +108,7 @@ class Mapping {
 
     LOG.debug("persisting; query={}", query);
 
-    ResultSetFuture res = session.executeAsync(query);
-
-    Futures.addCallback(
-      res, new FutureCallback<ResultSet>() {
-      public void onSuccess(ResultSet result) {
-        LOG.info("GOT RESULT: {}", result);
-      }
-
-      public void onFailure(Throwable t) {
-        LOG.error("FAIL", t);
-      }
-    });
-
-    return Futures.transform(res, Functions.constant(obj));
+    return Futures.transform(session.executeAsync(query), Functions.constant(obj));
   }
 
   private static Map<String, FieldMapping> fieldMappingsFor(Class<?> target)
