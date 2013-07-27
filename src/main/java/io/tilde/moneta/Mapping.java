@@ -13,6 +13,9 @@ import io.tilde.moneta.annotations.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,11 +28,16 @@ import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 class Mapping {
   private static Logger LOG = LoggerFactory.getLogger(Mapping.class);
 
+  // Used to lookup the classes constructor
+  private static MethodHandles.Lookup lookup = MethodHandles.lookup();
+
   private final Class<?> target;
 
   private final String keyspace;
 
   private final String table;
+
+  private final MethodHandle constructor;
 
   private final Map<String, FieldMapping> fields;
 
@@ -41,6 +49,7 @@ class Mapping {
     this.target = target;
     this.keyspace = keyspace;
     this.table = table != null ? table : tableFor(target);
+    this.constructor = constructorFor(target);
     this.fields = fieldMappingsFor(target);
 
     if (fields.isEmpty())
@@ -73,7 +82,7 @@ class Mapping {
   }
 
   <T> T load(Class<T> klass, Row row) {
-    T inst = build(klass);
+    T inst = build(klass, constructor);
 
     if (inst == null)
       return null;
@@ -85,16 +94,13 @@ class Mapping {
     return inst;
   }
 
-  static <T> T build(Class<T> klass) {
+  @SuppressWarnings("unchecked")
+  static <T> T build(Class<T> klass, MethodHandle constructor) {
     try {
-      return klass.newInstance();
+      return (T) constructor.invoke();
     }
-    catch (InstantiationException e) {
+    catch (Throwable throwable) {
       LOG.warn("could not create instance; klass={}", klass);
-      return null;
-    }
-    catch (IllegalAccessException e) {
-      LOG.warn("could not create instance; klass={}; msg={}", klass, e.getMessage(), e);
       return null;
     }
   }
@@ -109,6 +115,23 @@ class Mapping {
     LOG.debug("persisting; query={}", query);
 
     return Futures.transform(session.executeAsync(query), Functions.constant(obj));
+  }
+
+  private static MethodHandle constructorFor(Class<?> target) {
+    try {
+      Constructor<?> constructor = target.getConstructor();
+      constructor.setAccessible(true);
+
+      return lookup.unreflectConstructor(constructor);
+    }
+    catch (NoSuchMethodException e) {
+      LOG.warn("no default constructor for class " + target);
+    }
+    catch (IllegalAccessException e) {
+      LOG.warn("could not access default constructor for class " + target);
+    }
+
+    return null;
   }
 
   private static Map<String, FieldMapping> fieldMappingsFor(Class<?> target)

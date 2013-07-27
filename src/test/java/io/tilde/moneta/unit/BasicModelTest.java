@@ -21,11 +21,22 @@ public class BasicModelTest extends TestCase {
     Cassandra.start();
   }
 
+  /**
+   * TODO:
+   * - Counter
+   * - Timestamp / Date
+   * - Float
+   * - Double
+   * - Blob
+   * - Decimal
+   * - TimeUUID
+   * - Inet
+   */
   @Table("songs")
-  public static class Song {
+  static class Song1 {
 
-    @PrimaryKey("id")
-    UUID key;
+    @PrimaryKey
+    UUID id;
 
     @Column
     String name;
@@ -36,22 +47,26 @@ public class BasicModelTest extends TestCase {
     @Column
     int plays;
 
-    Song(UUID key, String name, boolean explicit, int plays) {
-      this.key = key;
+    Song1(String name, boolean explicit, int plays) {
+      this(UUID.randomUUID(), name, explicit, plays);
+    }
+
+    Song1(UUID id, String name, boolean explicit, int plays) {
+      this.id = id;
       this.name = name;
       this.explicit = explicit;
       this.plays = plays;
     }
 
-    public Song() {
+    public Song1() {
     }
 
     public boolean equals(Object o) {
-      if (o instanceof Song) {
-        Song other = (Song) o;
+      if (o instanceof Song1) {
+        Song1 other = (Song1) o;
 
         return
-          Objects.equals(key, other.key) &&
+          Objects.equals(id, other.id) &&
           Objects.equals(name, other.name) &&
           explicit == other.explicit &&
           plays == other.plays;
@@ -63,15 +78,44 @@ public class BasicModelTest extends TestCase {
 
   @Test
   public void testPersistingAndLoadingABasicModel() {
-    Song song = new Song(UUID.randomUUID(), "Zomg", true, 3);
+    Song1 song = new Song1("Zomg", true, 3);
 
     mapper().persist(song);
 
-    assertThat(mapper().get(Song.class, song.key), equalTo(song));
+    assertThat(mapper().get(Song1.class, song.id), equalTo(song));
+  }
+
+  @Table("songs")
+  static class Song2 {
+
+    @PrimaryKey
+    UUID id;
+
+    @Column
+    long plays;
+
+    public Song2() {
+    }
   }
 
   @Test
-  public void testZomg() {
-    assertThat(true, equalTo(true));
+  public void testLoadingVarIntAsLong() {
+    Song1 song = new Song1("Zomg", true, 3);
+    mapper().persist(song);
+
+    assertThat(mapper().get(Song2.class, song.id).plays, equalTo(3L));
   }
+
+  @Test
+  public void testLoadingVarIntAsBigInteger() {
+  }
+
+  @Test
+  public void testLoadingAsciiAsString() {
+  }
+
+  @Test
+  public void testLoadingVarCharAsString() {
+  }
+
 }
