@@ -1,6 +1,9 @@
 package io.tilde.moneta;
 
-import com.datastax.driver.core.*;
+import com.datastax.driver.core.Query;
+import com.datastax.driver.core.ResultSet;
+import com.datastax.driver.core.Row;
+import com.datastax.driver.core.Session;
 import com.datastax.driver.core.querybuilder.Insert;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.google.common.base.Function;
@@ -10,6 +13,8 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.tilde.moneta.annotations.Column;
 import io.tilde.moneta.annotations.PrimaryKey;
 import io.tilde.moneta.annotations.Table;
+import io.tilde.moneta.loaders.ArgumentConstructorLoader;
+import io.tilde.moneta.loaders.DefaultConstructorLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,43 +22,46 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 
 /**
  * @author Carl Lerche
  */
-class Mapping {
+class Mapping<T> {
   private static Logger LOG = LoggerFactory.getLogger(Mapping.class);
 
   // Used to lookup the classes constructor
   private static MethodHandles.Lookup lookup = MethodHandles.lookup();
 
-  private final Class<?> target;
+  private final Class<T> target;
 
   private final String keyspace;
 
   private final String table;
 
-  private final MethodHandle constructor;
+  private final MonetaLoader<T> loader;
 
-  private final Map<String, FieldMapping> fields;
+  private final List<FieldMapping> fields;
 
-  Mapping(Class<?> target, String keyspace) throws IllegalAccessException {
+  Mapping(Class<T> target, String keyspace)
+    throws IllegalAccessException {
     this(target, keyspace, null);
   }
 
-  Mapping(Class<?> target, String keyspace, String table) throws IllegalAccessException {
+  Mapping(Class<T> target, String keyspace, String table)
+    throws IllegalAccessException {
+
     this.target = target;
     this.keyspace = keyspace;
     this.table = table != null ? table : tableFor(target);
-    this.constructor = constructorFor(target);
     this.fields = fieldMappingsFor(target);
 
     if (fields.isEmpty())
       throw new IllegalArgumentException("target class has no defined columns");
+
+    this.loader = loaderFor(target, fields);
   }
 
   private static String tableFor(Class<?> target) {
@@ -65,7 +73,7 @@ class Mapping {
     return table.value();
   }
 
-  <T> ListenableFuture<T> get(Session session, final Class<T> klass, Object key) {
+  ListenableFuture<T> get(Session session, Object key) {
     Query query = QueryBuilder.select()
       .from(keyspace, table)
       .where(eq("id", key));
@@ -76,40 +84,20 @@ class Mapping {
       session.executeAsync(query),
       new Function<ResultSet, T>() {
         public T apply(ResultSet res) {
-          return load(klass, res.one());
+          return load(res.one());
         }
       });
   }
 
-  <T> T load(Class<T> klass, Row row) {
-    T inst = build(klass, constructor);
-
-    if (inst == null)
-      return null;
-
-    for (FieldMapping mapping : fields.values()) {
-      mapping.set(inst, row);
-    }
-
-    return inst;
+  T load(Row row) {
+    return loader.load(row);
   }
 
-  @SuppressWarnings("unchecked")
-  static <T> T build(Class<T> klass, MethodHandle constructor) {
-    try {
-      return (T) constructor.invoke();
-    }
-    catch (Throwable throwable) {
-      LOG.warn("could not create instance; klass={}", klass);
-      return null;
-    }
-  }
-
-  <T> ListenableFuture<T> persist(Session session, T obj) {
+  ListenableFuture<T> persist(Session session, T obj) {
     Insert query = QueryBuilder.insertInto(keyspace, table);
 
-    for (Map.Entry<String, FieldMapping> field : fields.entrySet()) {
-      query.value(field.getKey(), field.getValue().get(obj));
+    for (FieldMapping field : fields) {
+      query.value(field.getName(), field.get(obj));
     }
 
     LOG.debug("persisting; query={}", query);
@@ -117,27 +105,83 @@ class Mapping {
     return Futures.transform(session.executeAsync(query), Functions.constant(obj));
   }
 
-  private static MethodHandle constructorFor(Class<?> target) {
-    try {
-      Constructor<?> constructor = target.getConstructor();
-      constructor.setAccessible(true);
-
-      return lookup.unreflectConstructor(constructor);
-    }
-    catch (NoSuchMethodException e) {
-      LOG.warn("no default constructor for class " + target);
-    }
-    catch (IllegalAccessException e) {
-      LOG.warn("could not access default constructor for class " + target);
-    }
-
-    return null;
-  }
-
-  private static Map<String, FieldMapping> fieldMappingsFor(Class<?> target)
+  private static <X> MonetaLoader<X> loaderFor(
+    Class<X> target, Collection<FieldMapping> fields)
     throws IllegalAccessException {
 
-    Map<String, FieldMapping> ret = new HashMap<>();
+    Constructor<?> candidate = null;
+
+    LOG.trace("constructors={}", target.getDeclaredConstructors());
+
+    for (Constructor<?> curr : target.getDeclaredConstructors()) {
+      if (!isCandidate(curr, fields)) {
+        continue;
+      }
+
+      candidate = bestMatch(candidate, curr);
+    }
+
+    if (candidate == null)
+      return null;
+
+    // Probably can improve this later
+    if (candidate.getParameterTypes().length == 0) {
+      return new DefaultConstructorLoader<>(candidate, fields);
+    }
+    else {
+      return new ArgumentConstructorLoader<>(candidate, fields);
+    }
+  }
+
+  private static boolean isCandidate(
+    Constructor<?> constructor, Collection<FieldMapping> fields) {
+
+    // Constructor params
+    Class<?>[] params = constructor.getParameterTypes();
+
+    // The default constructor is a candidate
+    if (params.length == 0) {
+      return true;
+    }
+
+    // If the number of params doesn't match the number of fields, then there is no match
+    if (params.length != fields.size()) {
+      return false;
+    }
+
+    int curr = 0;
+    for (FieldMapping field : fields) {
+      // for now, we only do exact matches
+      if (field.getType() != params[curr]) {
+        return false;
+      }
+
+      ++curr;
+    }
+
+    return true;
+  }
+
+  private static Constructor<?> bestMatch(Constructor<?> a, Constructor<?> b) {
+    if (a == null)
+      return b;
+
+    if (b == null)
+      return a;
+
+    // For now, one has to have no params
+    if (a.getParameterTypes().length > b.getParameterTypes().length) {
+      return a;
+    }
+    else {
+      return b;
+    }
+  }
+
+  private static List<FieldMapping> fieldMappingsFor(Class<?> target)
+    throws IllegalAccessException {
+
+    List<FieldMapping> ret = new ArrayList<>();
 
     for (Field field : target.getDeclaredFields()) {
       PrimaryKey pk = field.getAnnotation(PrimaryKey.class);
@@ -150,13 +194,13 @@ class Mapping {
       FieldMapping mapping;
 
       if (pk != null) {
-        mapping = FieldMapping.build(target, pk.value(), field);
+        mapping = FieldMapping.build(pk.value(), field);
       }
       else {
-        mapping = FieldMapping.build(target, col.value(), field);
+        mapping = FieldMapping.build(col.value(), field);
       }
 
-      ret.put(mapping.getName(), mapping);
+      ret.add(mapping);
     }
 
     return ret;

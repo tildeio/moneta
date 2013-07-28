@@ -59,7 +59,7 @@ public class MonetaMapper {
   }
 
   public <T> ListenableFuture<T> getAsync(Class<T> klass, Object key) {
-    return mappingFor(klass).get(session, klass, key);
+    return mappingFor(klass).get(session, key);
   }
 
   public <T> Collection<T> getAll(Class<T> klass, Iterable<?> keys) {

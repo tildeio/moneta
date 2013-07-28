@@ -16,11 +16,6 @@ import static org.hamcrest.MatcherAssert.assertThat;
 
 public class BasicModelTest extends TestCase {
 
-  @BeforeClass
-  public static void startCassandra() {
-    Cassandra.start();
-  }
-
   /**
    * TODO:
    * - Counter

@@ -16,38 +16,61 @@ import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.UUID;
 
-abstract class FieldMapping {
+public abstract class FieldMapping {
   private static Logger LOG = LoggerFactory.getLogger(FieldMapping.class);
 
   private static MethodHandles.Lookup lookup = MethodHandles.lookup();
 
-  static FieldMapping build(Class<?> target, String name, Field field)
+  static class Params {
+    final String name;
+
+    final Class<?> type;
+
+    final MethodHandle getter;
+
+    final MethodHandle setter;
+
+    Params(Class<?> type, String name, MethodHandle g, MethodHandle s) {
+      this.type = type;
+      this.name = name;
+      this.getter = g;
+      this.setter = s;
+    }
+  }
+
+  static FieldMapping build(String name, Field field)
     throws IllegalAccessException {
 
     // We need to bypass checks
     field.setAccessible(true);
 
     Class<?> type = field.getType();
-    name = name.equals("-") ? field.getName() : name;
-    MethodHandle getter = lookup.unreflectGetter(field);
-    MethodHandle setter = lookup.unreflectSetter(field);
+    Params params = new Params(type,
+      name.equals("-") ? field.getName() : name,
+      lookup.unreflectGetter(field),
+      lookup.unreflectSetter(field));
 
     if (UUID.class.isAssignableFrom(type)) {
-      return new UUIDFieldMapping(name, getter, setter);
+      return new UUIDFieldMapping(params);
     }
     else if (String.class.isAssignableFrom(type)) {
-      return new StringFieldMapping(name, getter, setter);
+      return new StringFieldMapping(params);
     }
     else if (boolean.class.isAssignableFrom(type)) {
-      return new BooleanFieldMapping(name, getter, setter);
+      return new BooleanFieldMapping(params);
     }
     else if (int.class.isAssignableFrom(type)) {
-      return new IntegerFieldMapping(name, getter, setter);
+      return new IntegerFieldMapping(params);
+    }
+    else if (long.class.isAssignableFrom(type)) {
+      return new LongFieldMapping(params);
     }
     else {
       throw new RuntimeException("can't handle fields of type `" + type + "`");
     }
   }
+
+  private final Class<?> type;
 
   private final String name;
 
@@ -55,10 +78,15 @@ abstract class FieldMapping {
 
   private final MethodHandle setter;
 
-  FieldMapping(String name, MethodHandle getter, MethodHandle setter) {
-    this.name = name;
-    this.getter = getter;
-    this.setter = setter;
+  FieldMapping(Params params) {
+    this.type = params.type;
+    this.name = params.name;
+    this.getter = params.getter;
+    this.setter = params.setter;
+  }
+
+  Class<?> getType() {
+    return type;
   }
 
   String getName() {
@@ -74,57 +102,46 @@ abstract class FieldMapping {
     }
   }
 
-  void set(Object obj, Row row) {
+  public Object cast(Row row) {
     DataType type = row.getColumnDefinitions().getType(getName());
 
     switch (type.getName()) {
       case BOOLEAN:
-        set(obj, row.getBool(getName()));
-        break;
+        return cast(row.getBool(getName()));
 
       case INT:
-        set(obj, row.getInt(getName()));
-        break;
+        return cast(row.getInt(getName()));
 
       case BIGINT:
       case COUNTER:
-        set(obj, row.getLong(getName()));
-        break;
+        return cast(row.getLong(getName()));
 
       case TIMESTAMP:
-        set(obj, row.getDate(getName()));
-        break;
+        return cast(row.getDate(getName()));
 
       case FLOAT:
-        set(obj, row.getFloat(getName()));
-        break;
+        return cast(row.getFloat(getName()));
 
       case DOUBLE:
-        set(obj, row.getDouble(getName()));
-        break;
+        return cast(row.getDouble(getName()));
 
       case BLOB:
-        set(obj, row.getBytes(getName()));
-        break;
+        return cast(row.getBytes(getName()));
 
       case ASCII:
       case TEXT:
       case VARCHAR:
-        set(obj, row.getString(getName()));
-        break;
+        return cast(row.getString(getName()));
 
       case DECIMAL:
-        set(obj, row.getDecimal(getName()));
-        break;
+        return cast(row.getDecimal(getName()));
 
       case UUID:
       case TIMEUUID:
-        set(obj, row.getUUID(getName()));
-        break;
+        return cast(row.getUUID(getName()));
 
       case INET:
-        set(obj, row.getInet(getName()));
-        break;
+        return cast(row.getInet(getName()));
 
       case LIST:
       case SET:
@@ -132,69 +149,64 @@ abstract class FieldMapping {
         throw new InvalidTypeException("collection support not implemented");
 
       case VARINT:
-        set(obj, row.getVarint(getName()));
-        break;
+        return cast(row.getVarint(getName()));
 
       default:
         throw new InvalidTypeException("unknown type");
     }
   }
 
-  protected void set(Object obj, boolean val) {
-    set(obj, (Object) val);
+  protected Object cast(boolean val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, int val) {
-    set(obj, (Object) val);
+  protected Object cast(int val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, long val) {
-    set(obj, (Object) val);
+  protected Object cast(long val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, Date val) {
-    set(obj, (Object) val);
+  protected Object cast(Date val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, double val) {
-    set(obj, (Object) val);
+  protected Object cast(double val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, float val) {
-    set(obj, (Object) val);
+  protected Object cast(float val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, ByteBuffer val) {
-    set(obj, (Object) val);
+  protected Object cast(ByteBuffer val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, String val) {
-    set(obj, (Object) val);
+  protected Object cast(String val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, BigDecimal val) {
-    set(obj, (Object) val);
+  protected Object cast(BigDecimal val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, UUID val) {
-    set(obj, (Object) val);
+  protected Object cast(UUID val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, InetAddress val) {
-    set(obj, (Object) val);
+  protected Object cast(InetAddress val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, BigInteger val) {
-    set(obj, (Object) val);
+  protected Object cast(BigInteger val) {
+    throw castEx(val);
   }
 
-  protected void set(Object obj, Object val) {
-    throw new InvalidTypeException(
-      "cannot convert `" + val.getClass() + "` to `" + type() + "`");
-  }
-
-  protected Class<?> type() {
-    return this.getClass();
+  private RuntimeException castEx(Object val) {
+    return new InvalidTypeException(
+      "cannot convert `" + val.getClass() + "` to `" + getType() + "`");
   }
 
   /**
@@ -203,7 +215,7 @@ abstract class FieldMapping {
    * @param obj the target object of the set
    * @param val the value to set
    */
-  protected void setRaw(Object obj, Object val) {
+  public void set(Object obj, Object val) {
     LOG.trace("setRaw; obj={}; name={}; val={}", obj, name, val);
     try {
       setter.invoke(obj, val);
@@ -214,61 +226,86 @@ abstract class FieldMapping {
   }
 
   static class UUIDFieldMapping extends FieldMapping {
-    UUIDFieldMapping(String name, MethodHandle getter, MethodHandle setter) {
-      super(name, getter, setter);
+    UUIDFieldMapping(Params params) {
+      super(params);
     }
 
-    protected void set(Object obj, UUID val) {
-      setRaw(obj, val);
+    protected Object cast(UUID val) {
+      return val;
     }
   }
 
   static class StringFieldMapping extends FieldMapping {
-    StringFieldMapping(String name, MethodHandle getter, MethodHandle setter) {
-      super(name, getter, setter);
+    StringFieldMapping(Params params) {
+      super(params);
     }
 
-    protected void set(Object obj, String val) {
-      setRaw(obj, val);
+    protected Object cast(String val) {
+      return val;
     }
   }
 
   static class BooleanFieldMapping extends FieldMapping {
-    BooleanFieldMapping(String name, MethodHandle getter, MethodHandle setter) {
-      super(name, getter, setter);
+    BooleanFieldMapping(Params params) {
+      super(params);
     }
 
-    protected void set(Object obj, boolean val) {
-      setRaw(obj, val);
+    protected Object cast(boolean val) {
+      return val;
     }
   }
 
   static class IntegerFieldMapping extends FieldMapping {
-    IntegerFieldMapping(String name, MethodHandle getter, MethodHandle setter) {
-      super(name, getter, setter);
+    IntegerFieldMapping(Params params) {
+      super(params);
     }
 
     private static final BigInteger MAXINT = BigInteger.valueOf(Integer.MAX_VALUE);
     private static final BigInteger MININT = BigInteger.valueOf(Integer.MIN_VALUE);
 
-    protected void set(Object obj, BigInteger val) {
+    protected Object cast(BigInteger val) {
       if (!MININT.min(val).equals(MININT) || !MAXINT.max(val).equals(MAXINT)) {
         throw new InvalidTypeException("varint out of int range");
       }
 
-      setRaw(obj, val.intValue());
+      return val.intValue();
     }
 
-    protected void set(Object obj, int val) {
-      setRaw(obj, val);
+    protected Object cast(int val) {
+      return val;
     }
 
-    protected void set(Object obj, long val) {
+    protected Object cast(long val) {
       if (val < Integer.MIN_VALUE || val > Integer.MAX_VALUE) {
         throw new InvalidTypeException("bigint out of int range");
       }
 
-      setRaw(obj, (int) val);
+      return val;
+    }
+  }
+
+  static class LongFieldMapping extends FieldMapping {
+    LongFieldMapping(Params params) {
+      super(params);
+    }
+
+    private static final BigInteger MAXLONG = BigInteger.valueOf(Long.MAX_VALUE);
+    private static final BigInteger MINLONG = BigInteger.valueOf(Long.MIN_VALUE);
+
+    protected Object cast(BigInteger val) {
+      if (!MINLONG.min(val).equals(MINLONG) || !MAXLONG.max(val).equals(MAXLONG)) {
+        throw new InvalidTypeException("varint out of int range");
+      }
+
+      return val.longValue();
+    }
+
+    protected Object cast(int val) {
+      return (long) val;
+    }
+
+    protected Object cast(long val) {
+      return val;
     }
   }
 }

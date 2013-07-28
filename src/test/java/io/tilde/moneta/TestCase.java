@@ -2,9 +2,16 @@ package io.tilde.moneta;
 
 import com.datastax.driver.core.KeyspaceMetadata;
 import com.datastax.driver.core.Session;
+import io.tilde.moneta.support.Cassandra;
 import org.junit.Before;
+import org.junit.BeforeClass;
 
 public class TestCase {
+
+  @BeforeClass
+  public static void startCassandra() {
+    Cassandra.start();
+  }
 
   private MonetaMapper mapper = null;
 
