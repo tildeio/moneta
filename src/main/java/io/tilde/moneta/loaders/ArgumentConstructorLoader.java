@@ -18,36 +18,21 @@ import java.util.List;
  *
  * @author Carl Lerche
  */
-public class ArgumentConstructorLoader<T> implements MonetaLoader<T> {
+public class ArgumentConstructorLoader<T> extends ConstructorLoader<T> {
   private static Logger LOG =
     LoggerFactory.getLogger(ArgumentConstructorLoader.class);
-
-  private static MethodHandles.Lookup lookup = MethodHandles.lookup();
-
-  private final MethodHandle constructor;
-
-  private final Collection<FieldMapping> fields;
 
   public ArgumentConstructorLoader(
     Constructor<?> constructor,
     Collection<FieldMapping> fields)
     throws IllegalAccessException {
-
-    // Simple check
-    if (constructor.getParameterTypes().length != fields.size())
-      throw new IllegalArgumentException("invalid constructor");
-
-    constructor.setAccessible(true  );
-
-    // Unreflect the constructor
-    this.constructor = lookup.unreflectConstructor(constructor);
-    this.fields = fields;
+    super(constructor, fields);
   }
 
   public T load(Row row) {
-    List<Object> arguments = new ArrayList<>(fields.size());
+    List<Object> arguments = new ArrayList<>(getFields().size());
 
-    for (FieldMapping field : fields) {
+    for (FieldMapping field : getFields()) {
       arguments.add(field.cast(row));
     }
 
@@ -57,7 +42,7 @@ public class ArgumentConstructorLoader<T> implements MonetaLoader<T> {
   @SuppressWarnings("unchecked")
   private T build(List<?> arguments) {
     try {
-      return (T) constructor.invokeWithArguments(arguments);
+      return (T) getConstructor().invokeWithArguments(arguments);
     }
     catch (Throwable t) {
       LOG.warn("could not create instance; ex={}", t);

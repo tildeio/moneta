@@ -17,29 +17,16 @@ import java.util.Collection;
  *
  * @author Carl Lerche
  */
-public class DefaultConstructorLoader<T> implements MonetaLoader<T> {
+public class DefaultConstructorLoader<T> extends ConstructorLoader<T> {
+
   private static Logger LOG =
     LoggerFactory.getLogger(DefaultConstructorLoader.class);
-
-  private static MethodHandles.Lookup lookup = MethodHandles.lookup();
-
-  private final MethodHandle constructor;
-
-  private final Collection<FieldMapping> fields;
 
   public DefaultConstructorLoader(
     Constructor<?> constructor,
     Collection<FieldMapping> fields)
     throws IllegalAccessException {
-
-    if (constructor.getParameterTypes().length > 0)
-      throw new IllegalArgumentException("not default constructor");
-
-    constructor.setAccessible(true);
-
-    // Unreflect the constructor
-    this.constructor = lookup.unreflectConstructor(constructor);
-    this.fields = fields;
+    super(constructor, fields);
   }
 
   public T load(Row row) {
@@ -48,7 +35,7 @@ public class DefaultConstructorLoader<T> implements MonetaLoader<T> {
     if (inst == null)
       return null;
 
-    for (FieldMapping field : fields) {
+    for (FieldMapping field : getFields()) {
       field.set(inst, field.cast(row));
     }
 
@@ -58,7 +45,7 @@ public class DefaultConstructorLoader<T> implements MonetaLoader<T> {
   @SuppressWarnings("unchecked")
   private T build() {
     try {
-      return (T) constructor.invoke();
+      return (T) getConstructor().invoke();
     }
     catch (Throwable t) {
       LOG.warn("could not create instance; ex={}", t);

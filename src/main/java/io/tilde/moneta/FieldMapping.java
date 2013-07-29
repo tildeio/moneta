@@ -85,15 +85,15 @@ public abstract class FieldMapping {
     this.setter = params.setter;
   }
 
-  Class<?> getType() {
+  public Class<?> getType() {
     return type;
   }
 
-  String getName() {
+  public String getName() {
     return name;
   }
 
-  Object get(Object obj) {
+  public Object get(Object obj) {
     try {
       return getter.invoke(obj);
     }

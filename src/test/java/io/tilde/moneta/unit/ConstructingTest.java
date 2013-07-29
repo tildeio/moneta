@@ -41,4 +41,9 @@ public class ConstructingTest extends TestCase {
     assertThat(songB.id, equalTo(songA.id));
     assertThat(songB.name, equalTo(songA.name));
   }
+
+  @Test
+  public void testLoadingModelWithCustomLoader() {
+    // Specify a loading class
+  }
 }

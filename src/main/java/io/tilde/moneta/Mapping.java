@@ -13,16 +13,14 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.tilde.moneta.annotations.Column;
 import io.tilde.moneta.annotations.PrimaryKey;
 import io.tilde.moneta.annotations.Table;
-import io.tilde.moneta.loaders.ArgumentConstructorLoader;
-import io.tilde.moneta.loaders.DefaultConstructorLoader;
+import io.tilde.moneta.loaders.ConstructorLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 
@@ -61,7 +59,7 @@ class Mapping<T> {
     if (fields.isEmpty())
       throw new IllegalArgumentException("target class has no defined columns");
 
-    this.loader = loaderFor(target, fields);
+    this.loader = ConstructorLoader.loaderFor(target, fields);
   }
 
   private static String tableFor(Class<?> target) {
@@ -103,79 +101,6 @@ class Mapping<T> {
     LOG.debug("persisting; query={}", query);
 
     return Futures.transform(session.executeAsync(query), Functions.constant(obj));
-  }
-
-  private static <X> MonetaLoader<X> loaderFor(
-    Class<X> target, Collection<FieldMapping> fields)
-    throws IllegalAccessException {
-
-    Constructor<?> candidate = null;
-
-    LOG.trace("constructors={}", target.getDeclaredConstructors());
-
-    for (Constructor<?> curr : target.getDeclaredConstructors()) {
-      if (!isCandidate(curr, fields)) {
-        continue;
-      }
-
-      candidate = bestMatch(candidate, curr);
-    }
-
-    if (candidate == null)
-      return null;
-
-    // Probably can improve this later
-    if (candidate.getParameterTypes().length == 0) {
-      return new DefaultConstructorLoader<>(candidate, fields);
-    }
-    else {
-      return new ArgumentConstructorLoader<>(candidate, fields);
-    }
-  }
-
-  private static boolean isCandidate(
-    Constructor<?> constructor, Collection<FieldMapping> fields) {
-
-    // Constructor params
-    Class<?>[] params = constructor.getParameterTypes();
-
-    // The default constructor is a candidate
-    if (params.length == 0) {
-      return true;
-    }
-
-    // If the number of params doesn't match the number of fields, then there is no match
-    if (params.length != fields.size()) {
-      return false;
-    }
-
-    int curr = 0;
-    for (FieldMapping field : fields) {
-      // for now, we only do exact matches
-      if (field.getType() != params[curr]) {
-        return false;
-      }
-
-      ++curr;
-    }
-
-    return true;
-  }
-
-  private static Constructor<?> bestMatch(Constructor<?> a, Constructor<?> b) {
-    if (a == null)
-      return b;
-
-    if (b == null)
-      return a;
-
-    // For now, one has to have no params
-    if (a.getParameterTypes().length > b.getParameterTypes().length) {
-      return a;
-    }
-    else {
-      return b;
-    }
   }
 
   private static List<FieldMapping> fieldMappingsFor(Class<?> target)
