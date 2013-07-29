@@ -8,8 +8,11 @@ import com.datastax.driver.core.querybuilder.Insert;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.google.common.base.Function;
 import com.google.common.base.Functions;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import io.tilde.moneta.annotations.Cached;
 import io.tilde.moneta.annotations.Column;
 import io.tilde.moneta.annotations.PrimaryKey;
 import io.tilde.moneta.annotations.Table;
@@ -21,10 +24,12 @@ import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
 
 /**
+ *
  * @author Carl Lerche
  */
 class Mapping<T> {
@@ -43,6 +48,8 @@ class Mapping<T> {
 
   private final List<FieldMapping> fields;
 
+  private final Cache<Object, T> cache;
+
   Mapping(Class<T> target, String keyspace)
     throws IllegalAccessException {
     this(target, keyspace, null);
@@ -60,6 +67,7 @@ class Mapping<T> {
       throw new IllegalArgumentException("target class has no defined columns");
 
     this.loader = ConstructorLoader.loaderFor(target, fields);
+    this.cache = cacheFor(target);
   }
 
   private static String tableFor(Class<?> target) {
@@ -71,7 +79,16 @@ class Mapping<T> {
     return table.value();
   }
 
-  ListenableFuture<T> get(Session session, Object key) {
+  public ListenableFuture<T> get(Session session, final Object key) {
+    // Check the cache first
+    if (cache != null) {
+      T ret = cache.getIfPresent(key);
+
+      if (ret != null) {
+        return Futures.immediateFuture(ret);
+      }
+    }
+
     Query query = QueryBuilder.select()
       .from(keyspace, table)
       .where(eq("id", key));
@@ -82,16 +99,27 @@ class Mapping<T> {
       session.executeAsync(query),
       new Function<ResultSet, T>() {
         public T apply(ResultSet res) {
-          return load(res.one());
+          return load(key, res.one());
         }
       });
   }
 
-  T load(Row row) {
-    return loader.load(row);
+  T load(Object key, Row row) {
+    if (cache == null)
+      return loader.load(row);
+
+    T ret = cache.getIfPresent(key);
+
+    if (ret != null)
+      return ret;
+
+    ret = loader.load(row);
+    cache.put(key, ret);
+    return ret;
   }
 
   ListenableFuture<T> persist(Session session, T obj) {
+    // TODO: cache on persist
     Insert query = QueryBuilder.insertInto(keyspace, table);
 
     for (FieldMapping field : fields) {
@@ -129,5 +157,17 @@ class Mapping<T> {
     }
 
     return ret;
+  }
+
+  private static <X> Cache<Object, X> cacheFor(Class<X> target) {
+    Cached cached = target.getAnnotation(Cached.class);
+
+    if (cached == null)
+      return null;
+
+    return CacheBuilder.newBuilder()
+      .maximumSize(1000)
+      .expireAfterAccess(10, TimeUnit.MINUTES)
+      .build();
   }
 }

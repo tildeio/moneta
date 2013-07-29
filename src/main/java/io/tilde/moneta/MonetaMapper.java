@@ -87,6 +87,15 @@ public class MonetaMapper {
     return mappingFor(obj).persist(session, obj);
   }
 
+  public <T> void delete(Class<T> klass, Object key) {
+  }
+
+  public <T> void invalidate(Class<T> klass, Object key) {
+  }
+
+  public <T> void invalidateAll(Class<T> klass, Iterable<?> keys) {
+  }
+
   private Mapping mappingFor(Class<?> klass) {
     Mapping ret = mappings.get(klass);
 

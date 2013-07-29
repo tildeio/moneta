@@ -12,6 +12,7 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 public class ConstructingTest extends TestCase {
+
   @Table("songs")
   static class Song1 {
 
