@@ -8,11 +8,11 @@ import java.util.List;
  */
 public class CompositeKey {
 
-  final List<Object> components;
+  final List<? extends Object> components;
 
   final int hashCode;
 
-  public CompositeKey(List<Object> components) {
+  public CompositeKey(List<? extends Object> components) {
     this.components = Collections.unmodifiableList(components);
     this.hashCode = components.hashCode();
   }

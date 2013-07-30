@@ -49,7 +49,7 @@ public class CompositeKeyTest extends TestCase {
   }
 
   @Test
-  public void testCompositeKeyModel() {
+  public void testGetCompositeKeyModel() {
     UUID uuid = UUID.randomUUID();
     Playlist p1 = new Playlist(uuid, "Foo", "Bar");
     Playlist p2 = new Playlist(uuid, "Foo", "Baz");

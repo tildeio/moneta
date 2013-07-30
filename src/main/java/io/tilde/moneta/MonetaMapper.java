@@ -58,19 +58,23 @@ public class MonetaMapper {
   }
 
   public <T> T get(Class<T> klass, Object part, Object... parts) {
-    List<Object> args = new ArrayList<>(parts.length + 1);
+    return get(klass, listifyVarargs(part, parts));
+  }
 
-    args.add(part);
-
-    for (int i = 0; i < parts.length; ++i) {
-      args.add(parts[i]);
-    }
-
-    return get(klass, new CompositeKey(args));
+  public <T> T get(Class<T> klass, List<? extends Object> key) {
+    return get(klass, new CompositeKey(key));
   }
 
   public <T> ListenableFuture<T> getAsync(Class<T> klass, Object key) {
     return mappingFor(klass).get(session, key);
+  }
+
+  public <T> ListenableFuture<T> getAsync(Class<T> klass, Object part, Object... parts) {
+    return getAsync(klass, listifyVarargs(part, parts));
+  }
+
+  public <T> ListenableFuture<T> getAsync(Class<T> klass, List<? extends Object> key) {
+    return getAsync(klass, new CompositeKey(key));
   }
 
   public <T> Collection<T> getAll(Class<T> klass, Iterable<?> keys) {
@@ -136,5 +140,17 @@ public class MonetaMapper {
 
   private <T> Mapping mappingFor(T obj) {
     return mappingFor(obj.getClass());
+  }
+
+  private List<Object> listifyVarargs(Object first, Object[] rest) {
+    List<Object> ret = new ArrayList<>(rest.length + 1);
+
+    ret.add(first);
+
+    for (int i = 0; i < rest.length; ++i) {
+      ret.add(rest[i]);
+    }
+
+    return ret;
   }
 }
