@@ -37,11 +37,16 @@ public class TestCase {
   public void reset() {
     createKeyspace(keyspace());
 
-    createTable("songs",
+    createTable(
+      "songs",
       "id uuid PRIMARY KEY, " +
-      "name text, " +
-      "explicit boolean, " +
-      "plays varint");
+        "name text, " +
+        "explicit boolean, " +
+        "plays varint");
+
+    createTable(
+      "playlists",
+      "id uuid, title text, album varchar, PRIMARY KEY (id, title, album)");
   }
 
   public void createKeyspace(String name) {

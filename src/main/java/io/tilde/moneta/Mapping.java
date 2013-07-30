@@ -1,11 +1,12 @@
 package io.tilde.moneta;
 
-import com.datastax.driver.core.Query;
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.Session;
+import com.datastax.driver.core.querybuilder.Clause;
 import com.datastax.driver.core.querybuilder.Insert;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
+import com.datastax.driver.core.querybuilder.Select;
 import com.google.common.base.Function;
 import com.google.common.base.Functions;
 import com.google.common.cache.Cache;
@@ -26,8 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import static com.datastax.driver.core.querybuilder.QueryBuilder.eq;
-
 /**
  *
  * @author Carl Lerche
@@ -45,6 +44,8 @@ class Mapping<T> {
   private final String table;
 
   private final MonetaLoader<T> loader;
+
+  private final KeyMapping primaryKey;
 
   private final List<FieldMapping> fields;
 
@@ -66,6 +67,7 @@ class Mapping<T> {
     if (fields.isEmpty())
       throw new IllegalArgumentException("target class has no defined columns");
 
+    this.primaryKey = KeyMapping.mappingFor(fields);
     this.loader = ConstructorLoader.loaderFor(target, fields);
     this.cache = cacheFor(target);
   }
@@ -89,9 +91,12 @@ class Mapping<T> {
       }
     }
 
-    Query query = QueryBuilder.select()
-      .from(keyspace, table)
-      .where(eq("id", key));
+    Select query = QueryBuilder.select()
+      .from(keyspace, table);
+
+    for (Clause clause : primaryKey.predicateForGet(key)) {
+      query.where(clause);
+    }
 
     LOG.debug("get; query={}", query);
 
@@ -147,10 +152,10 @@ class Mapping<T> {
       FieldMapping mapping;
 
       if (pk != null) {
-        mapping = FieldMapping.build(pk.value(), field);
+        mapping = FieldMapping.build(pk.value(), true, field);
       }
       else {
-        mapping = FieldMapping.build(col.value(), field);
+        mapping = FieldMapping.build(col.value(), false, field);
       }
 
       ret.add(mapping);

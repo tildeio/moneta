@@ -6,8 +6,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -56,6 +55,18 @@ public class MonetaMapper {
         throw new RuntimeException(e.getCause());
       }
     }
+  }
+
+  public <T> T get(Class<T> klass, Object part, Object... parts) {
+    List<Object> args = new ArrayList<>(parts.length + 1);
+
+    args.add(part);
+
+    for (int i = 0; i < parts.length; ++i) {
+      args.add(parts[i]);
+    }
+
+    return get(klass, new CompositeKey(args));
   }
 
   public <T> ListenableFuture<T> getAsync(Class<T> klass, Object key) {

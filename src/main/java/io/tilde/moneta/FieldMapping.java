@@ -22,6 +22,9 @@ public abstract class FieldMapping {
   private static MethodHandles.Lookup lookup = MethodHandles.lookup();
 
   static class Params {
+
+    final boolean primary;
+
     final String name;
 
     final Class<?> type;
@@ -30,15 +33,16 @@ public abstract class FieldMapping {
 
     final MethodHandle setter;
 
-    Params(Class<?> type, String name, MethodHandle g, MethodHandle s) {
+    Params(Class<?> type, String name, boolean primary, MethodHandle g, MethodHandle s) {
       this.type = type;
       this.name = name;
+      this.primary = primary;
       this.getter = g;
       this.setter = s;
     }
   }
 
-  static FieldMapping build(String name, Field field)
+  static FieldMapping build(String name, boolean primary, Field field)
     throws IllegalAccessException {
 
     // We need to bypass checks
@@ -47,6 +51,7 @@ public abstract class FieldMapping {
     Class<?> type = field.getType();
     Params params = new Params(type,
       name.equals("-") ? field.getName() : name,
+      primary,
       lookup.unreflectGetter(field),
       lookup.unreflectSetter(field));
 
@@ -74,6 +79,8 @@ public abstract class FieldMapping {
 
   private final String name;
 
+  private final boolean primary;
+
   private final MethodHandle getter;
 
   private final MethodHandle setter;
@@ -81,6 +88,7 @@ public abstract class FieldMapping {
   FieldMapping(Params params) {
     this.type = params.type;
     this.name = params.name;
+    this.primary = params.primary;
     this.getter = params.getter;
     this.setter = params.setter;
   }
@@ -91,6 +99,10 @@ public abstract class FieldMapping {
 
   public String getName() {
     return name;
+  }
+
+  public boolean isPrimary() {
+    return primary;
   }
 
   public Object get(Object obj) {
